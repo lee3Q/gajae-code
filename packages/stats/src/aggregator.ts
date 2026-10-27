@@ -6,13 +6,16 @@ import {
 	getBehaviorByModel,
 	getBehaviorOverall,
 	getBehaviorTimeSeries,
+	getCacheMissAttribution,
 	getCostTimeSeries,
+	getFailureReport,
 	getFileOffset,
 	getMessageById,
 	getMessageCount,
 	getModelPerformanceSeries,
 	getModelTimeSeries,
 	getOverallStats,
+	getStatsByAgent,
 	getStatsByFolder,
 	getStatsByModel,
 	getTimeSeries,
@@ -334,7 +337,13 @@ const TIME_RANGE_TO_CONFIG: Record<TimeRange, Omit<TimeRangeConfig, "cutoff">> =
 
 function getTimeRangeConfig(range?: string | null): TimeRangeConfig {
 	const normalized = range?.trim().toLowerCase() ?? DEFAULT_TIME_RANGE;
-	const config = TIME_RANGE_TO_CONFIG[normalized as TimeRange];
+	// Only own properties are range configs: a plain-object lookup also resolves
+	// inherited members, so "constructor" and "__proto__" (the two inherited
+	// names that survive lowercase normalization) would otherwise produce a
+	// NaN cutoff instead of the documented unknown-range fallback.
+	const config = Object.hasOwn(TIME_RANGE_TO_CONFIG, normalized)
+		? TIME_RANGE_TO_CONFIG[normalized as TimeRange]
+		: undefined;
 	if (config) {
 		const cutoff = normalized === "all" ? null : Date.now() - Math.max(1, config.timeSeriesHours * 60 * 60 * 1000);
 		return { ...config, cutoff };
@@ -365,12 +374,15 @@ export async function getDashboardStats(range?: string | null): Promise<Dashboar
 
 	return {
 		overall: getOverallStats(cutoff ?? undefined),
+		failures: getFailureReport(cutoff ?? undefined),
 		byModel: getStatsByModel(cutoff ?? undefined),
 		byFolder: getStatsByFolder(cutoff ?? undefined),
+		byAgent: getStatsByAgent(cutoff ?? undefined),
 		timeSeries: getTimeSeries(timeSeriesHours, cutoff, timeSeriesBucketMs),
 		modelSeries: getModelTimeSeries(modelSeriesDays, cutoff, modelSeriesBucketMs),
 		modelPerformanceSeries: getModelPerformanceSeries(modelPerformanceDays, cutoff, modelPerformanceBucketMs),
 		costSeries: getCostTimeSeries(costSeriesDays, cutoff),
+		cacheMissAttribution: getCacheMissAttribution(cutoff ?? undefined),
 	};
 }
 
